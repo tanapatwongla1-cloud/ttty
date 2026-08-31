@@ -1,0 +1,265 @@
+-- ============================================
+-- Script Name: ttty Script Hub
+-- Target: Roblox
+-- ============================================
+
+local Library = {
+    Flags = {},
+    Enabled = {
+        Wallbang = false,
+        Aimbot = false,
+        Fly = false,
+        InfiniteStamina = false,
+        Noclip = false,
+        InventoryESP = false
+    }
+}
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
+
+-- UI Notifications
+local function Notify(text)
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "ttty Hub",
+        Text = text,
+        Duration = 3
+    })
+end
+
+Notify("โหลดสคริปต์ ttty สำเร็จแล้ว!")
+
+-- ============================================
+-- 1. ยิงทะลุ (Wallbang / Shoot Through Walls)
+-- ============================================
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    
+    if Library.Enabled.Wallbang and (method == "Raycast" or method == "FindPartOnRayWithIgnoreList") then
+        -- ข้ามการตรวจจับสิ่งกีดขวางเมื่อยิง
+        return nil
+    end
+    
+    return oldNamecall(self, ...)
+end)
+
+-- ============================================
+-- 2. ล็อคหัว (Aimbot)
+-- ============================================
+local function GetClosestPlayer()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") and player.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
+            local pos, onScreen = Camera:WorldToViewportPoint(player.Character.Head.Position)
+            if onScreen then
+                local magnitude = (Vector2.new(pos.X, pos.Y) - Vector2.new(Mouse.X, Mouse.Y)).Magnitude
+                if magnitude < shortestDistance then
+                    closestPlayer = player
+                    shortestDistance = magnitude
+                end
+            end
+        end
+    end
+    return closestPlayer
+end
+
+RunService.RenderStepped:Connect(function()
+    if Library.Enabled.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        local target = GetClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild("Head") then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
+        end
+    end
+end)
+
+-- ============================================
+-- 3. บิน (Fly)
+-- ============================================
+local BodyVelocity, BodyGyro
+RunService.RenderStepped:Connect(function()
+    if Library.Enabled.Fly and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local HRP = LocalPlayer.Character.HumanoidRootPart
+        if not HRP:FindFirstChild("tttyFlyVelocity") then
+            BodyVelocity = Instance.new("BodyVelocity")
+            BodyVelocity.Name = "tttyFlyVelocity"
+            BodyVelocity.MaxForce = Vector3.new(1, 1, 1) * math.huge
+            BodyVelocity.Parent = HRP
+
+            BodyGyro = Instance.new("BodyGyro")
+            BodyGyro.Name = "tttyFlyGyro"
+            BodyGyro.MaxTorque = Vector3.new(1, 1, 1) * math.huge
+            BodyGyro.Parent = HRP
+        end
+
+        BodyGyro.CFrame = Camera.CFrame
+        local moveDir = Vector3.zero
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + Camera.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - Camera.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - Camera.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + Camera.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0, 1, 0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - Vector3.new(0, 1, 0) end
+
+        BodyVelocity.Velocity = moveDir * 50
+    else
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            if LocalPlayer.Character.HumanoidRootPart:FindFirstChild("tttyFlyVelocity") then
+                LocalPlayer.Character.HumanoidRootPart.tttyFlyVelocity:Destroy()
+            end
+            if LocalPlayer.Character.HumanoidRootPart:FindFirstChild("tttyFlyGyro") then
+                LocalPlayer.Character.HumanoidRootPart.tttyFlyGyro:Destroy()
+            end
+        end
+    end
+end)
+
+-- ============================================
+-- 4. วิ่งสเตมินาไม่จำกัด (Infinite Stamina)
+-- ============================================
+RunService.Stepped:Connect(function()
+    if Library.Enabled.InfiniteStamina and LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.WalkSpeed = 32 -- เพิ่มความเร็วพื้นฐาน
+        end
+        -- ดึงค่า Stamina ในตัวละคร (อ้างอิงตามค่าทั่วไปในหลายๆ เกม)
+        for _, v in pairs(LocalPlayer.Character:GetDescendants()) do
+            if v.Name:lower():find("stamina") and (v:IsA("NumberValue") or v:IsA("IntValue")) then
+                v.Value = 100
+            end
+        end
+    end
+end)
+
+-- ============================================
+-- 5. มุดดิน (Noclip / Underground)
+-- ============================================
+RunService.Stepped:Connect(function()
+    if Library.Enabled.Noclip and LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
+
+-- ============================================
+-- 6. มองเห็นของในตัว (Inventory ESP)
+-- ============================================
+local function UpdateInventoryESP()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            local head = player.Character.Head
+            local billboard = head:FindFirstChild("tttyInventoryESP")
+            
+            if Library.Enabled.InventoryESP then
+                if not billboard then
+                    billboard = Instance.new("BillboardGui")
+                    billboard.Name = "tttyInventoryESP"
+                    billboard.AlwaysOnTop = true
+                    billboard.Size = UDim2.new(0, 200, 0, 50)
+                    billboard.StudsOffset = Vector3.new(0, 3, 0)
+                    billboard.Parent = head
+
+                    local textLabel = Instance.new("TextLabel")
+                    textLabel.Name = "ItemsText"
+                    textLabel.Size = UDim2.new(1, 0, 1, 0)
+                    textLabel.BackgroundTransparency = 1
+                    textLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+                    textLabel.TextStrokeTransparency = 0
+                    textLabel.TextSize = 12
+                    textLabel.Parent = billboard
+                end
+
+                local items = {}
+                -- ดึงของใน Backpack
+                if player:FindFirstChild("Backpack") then
+                    for _, item in pairs(player.Backpack:GetChildren()) do
+                        table.insert(items, item.Name)
+                    end
+                end
+                -- ดึงของที่ถืออยู่
+                for _, item in pairs(player.Character:GetChildren()) do
+                    if item:IsA("Tool") then
+                        table.insert(items, "[" .. item.Name .. "]")
+                    end
+                end
+
+                local itemString = #items > 0 and table.concat(items, ", ") or "ไม่มีไอเทม"
+                billboard.ItemsText.Text = player.Name .. "\n[Items: " .. itemString .. "]"
+            else
+                if billboard then
+                    billboard:Destroy()
+                end
+            end
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(UpdateInventoryESP)
+
+-- ============================================
+-- สร้าง GUI ควบคุม (ttty Menu)
+-- ============================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "tttyHubGUI"
+ScreenGui.Parent = game:GetService("CoreGui")
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 220, 0, 270)
+MainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Title.Text = "ttty Script Hub"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 16
+Title.Font = Enum.Font.SourceSansBold
+Title.Parent = MainFrame
+
+local function CreateButton(name, positionY, featureKey)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.9, 0, 0, 30)
+    btn.Position = UDim2.new(0.05, 0, 0, positionY)
+    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    btn.Text = name .. ": OFF"
+    btn.TextColor3 = Color3.fromRGB(255, 100, 100)
+    btn.Font = Enum.Font.SourceSans
+    btn.TextSize = 14
+    btn.Parent = MainFrame
+
+    btn.MouseButton1Click:Connect(function()
+        Library.Enabled[featureKey] = not Library.Enabled[featureKey]
+        if Library.Enabled[featureKey] then
+            btn.Text = name .. ": ON"
+            btn.TextColor3 = Color3.fromRGB(100, 255, 100)
+        else
+            btn.Text = name .. ": OFF"
+            btn.TextColor3 = Color3.fromRGB(255, 100, 100)
+        end
+    end)
+end
+
+CreateButton("ยิงทะลุ", 40, "Wallbang")
+CreateButton("ล็อคหัว (คลิกขวา)", 75, "Aimbot")
+CreateButton("บิน (WASD/Space/Shift)", 110, "Fly")
+CreateButton("วิ่งสเตมีนาไม่จำกัด", 145, "InfiniteStamina")
+CreateButton("มุดดิน / Noclip", 180, "Noclip")
+CreateButton("มองเห็นของในตัว", 215, "InventoryESP")
